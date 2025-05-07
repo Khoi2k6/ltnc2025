@@ -69,8 +69,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    TTF_Font* questionFont = TTF_OpenFont("arial.ttf", 40);
-    TTF_Font* optionFont = TTF_OpenFont("arial.ttf", 30);
+    TTF_Font* questionFont = TTF_OpenFont("arial.ttf", 50);
+    TTF_Font* optionFont = TTF_OpenFont("arial.ttf", 40);
     if (!questionFont || !optionFont) {
         SDL_Log("Không thể tải phông chữ: %s", TTF_GetError());
         if (questionFont) TTF_CloseFont(questionFont);
@@ -129,14 +129,53 @@ int main(int argc, char* argv[]) {
             "Câu hỏi 4: Hành tinh nào gần Mặt Trời nhất?",
             {"A. Sao Hỏa", "B. Sao Kim", "C. Sao Thủy", "D. Sao Mộc"},
             2
+        },
+        {
+            "Câu hỏi 5: Sông dài nhất thế giới là sông nào?",
+            {"A. Sông Amazon", "B. Sông Nile", "C. Sông Yangtze", "D. Sông Mississippi"},
+            1
+        },
+        {
+            "Câu hỏi 6: 5 × 6 − 10 bằng bao nhiêu?",
+            {"A. 15", "B. 20", "C. 25", "D. 30"},
+            1
+        },
+        {
+            "Câu hỏi 7: Nguyên tố hóa học nào phổ biến nhất trong khí quyển Trái Đất?",
+            {"A. Oxy", "B. Nitơ", "C. Hydro", "D. Cacbon dioxit"},
+            1
+        },
+        {
+            "Câu hỏi 8: Tác giả của \"Truyện Kiều\" là ai?",
+            {"A. Nguyễn Trãi", "B. Nguyễn Du", "C. Hồ Xuân Hương", "D. Nguyễn Bỉnh Khiêm"},
+            1
+        },
+        {
+            "Câu hỏi 9: Nước nào có diện tích lớn nhất thế giới?",
+            {"A. Canada", "B. Trung Quốc", "C. Nga", "D. Mỹ"},
+            2
+        },
+        {
+            "Câu hỏi 10: Loài động vật nào có vòi dài và ngà trắng?",
+            {"A. Voi", "B. Tê giác", "C. Hà mã", "D. Trâu"},
+            0
+        },
+        {
+            "Câu hỏi 11: Ngày Quốc khánh Việt Nam là ngày nào?",
+            {"A. 30 tháng 4", "B. 2 tháng 9", "C. 1 tháng 5", "D. 10 tháng 3"},
+            1
+        },
+        {
+            "Câu hỏi 12: Hành tinh nào được gọi là \"Hành tinh đỏ\"?",
+            {"A. Sao Hỏa", "B. Sao Kim", "C. Sao Thổ", "D. Sao Mộc"},
+            0
         }
     };
 
-    // Đổi màu chữ: Vàng nhạt cho câu hỏi và đáp án
-    SDL_Color textColor = {0,0,0, 255};  // Vàng nhạt (thay vì trắng)
+    SDL_Color textColor = {255, 255, 102, 255};  // Vàng nhạt
     SDL_Color greenColor = {0, 255, 0, 255};     // Xanh lá
     SDL_Color redColor = {255, 0, 0, 255};       // Đỏ
-    SDL_Color highlightColor = {255, 153, 51, 255}; // Cam nhạt cho highlight (thay vì vàng)
+    SDL_Color highlightColor = {255, 153, 51, 255}; // Cam nhạt
 
     int w, h;
     SDL_Texture* correctTexture = createTextTexture(renderer, optionFont, "Đúng!", greenColor, w, h);
@@ -165,6 +204,9 @@ int main(int argc, char* argv[]) {
     bool showResult = false;
     int score = 0;
 
+    enum GameState { START, PLAYING, OVER };
+    GameState gameState = START;
+
     vector<SDL_Texture*> questionTextures;
     vector<SDL_Rect> questionRects(questions.size());
     vector<vector<SDL_Texture*>> optionTextures(questions.size(), vector<SDL_Texture*>(4));
@@ -178,28 +220,92 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Tạo texture cho chữ "Bắt đầu"
+    SDL_Texture* startTextTexture = createTextTexture(renderer, questionFont, "Bắt đầu", textColor, w, h);
+    SDL_Rect startTextRect = {(WINDOW_WIDTH - w) / 2, (WINDOW_HEIGHT - h) / 2, w, h};
+    if (!startTextTexture) {
+        SDL_Log("Không thể tạo texture cho 'Bắt đầu'");
+        TTF_CloseFont(questionFont);
+        TTF_CloseFont(optionFont);
+        SDL_DestroyTexture(bgTexture);
+        SDL_DestroyTexture(correctTexture);
+        SDL_DestroyTexture(wrongTexture);
+        SDL_DestroyTexture(nextTexture);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        TTF_Quit();
+        IMG_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    // Tạo texture cho màn hình kết thúc
+    SDL_Texture* overTextTexture = nullptr;
+    SDL_Rect overTextRect;
+    SDL_Texture* replayTexture = createTextTexture(renderer, optionFont, "Chơi lại", textColor, w, h);
+    SDL_Rect replayRect = {(WINDOW_WIDTH - w) / 2 - 150, 450, w, h};
+    SDL_Texture* exitTexture = createTextTexture(renderer, optionFont, "Thoát", textColor, w, h);
+    SDL_Rect exitRect = {(WINDOW_WIDTH - w) / 2 + 150, 450, w, h};
+    if (!replayTexture || !exitTexture) {
+        SDL_Log("Không thể tạo texture cho 'Chơi lại' hoặc 'Thoát'");
+        TTF_CloseFont(questionFont);
+        TTF_CloseFont(optionFont);
+        SDL_DestroyTexture(bgTexture);
+        SDL_DestroyTexture(correctTexture);
+        SDL_DestroyTexture(wrongTexture);
+        SDL_DestroyTexture(nextTexture);
+        SDL_DestroyTexture(startTextTexture);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        TTF_Quit();
+        IMG_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
     while (running) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 running = false;
             }
-            else if (event.type == SDL_MOUSEBUTTONDOWN && !showResult) {
+            else if (event.type == SDL_MOUSEBUTTONDOWN) {
                 int mouseX = event.button.x;
                 int mouseY = event.button.y;
-                for (int i = 0; i < 4; i++) {
-                    int optionY = 250 + i * 60;
-                    int optionX = (WINDOW_WIDTH - optionRects[currentQuestionIndex][i].w) / 2;
-                    if (mouseX >= optionX && mouseX <= optionX + optionRects[currentQuestionIndex][i].w &&
-                        mouseY >= optionY && mouseY <= optionY + optionRects[currentQuestionIndex][i].h) {
-                        selectedOption = i;
-                        showResult = true;
-                        if (selectedOption == questions[currentQuestionIndex].correctAnswer) {
-                            score += 10;
+                if (gameState == START) {
+                    gameState = PLAYING;
+                }
+                else if (gameState == PLAYING && !showResult) {
+                    for (int i = 0; i < 4; i++) {
+                        int optionX = (WINDOW_WIDTH - optionRects[currentQuestionIndex][i].w) / 2;
+                        if (mouseX >= optionX && mouseX <= optionX + optionRects[currentQuestionIndex][i].w &&
+                            mouseY >= optionRects[currentQuestionIndex][i].y && mouseY <= optionRects[currentQuestionIndex][i].y + optionRects[currentQuestionIndex][i].h) {
+                            selectedOption = i;
+                            showResult = true;
+                            if (selectedOption == questions[currentQuestionIndex].correctAnswer) {
+                                score += 10;
+                            }
                         }
                     }
                 }
+                else if (gameState == OVER) {
+                    // Xử lý nhấp chuột vào "Chơi lại"
+                    if (mouseX >= replayRect.x && mouseX <= replayRect.x + replayRect.w &&
+                        mouseY >= replayRect.y && mouseY <= replayRect.y + replayRect.h) {
+                        // Reset game
+                        currentQuestionIndex = 0;
+                        selectedOption = -1;
+                        showResult = false;
+                        score = 0;
+                        gameState = PLAYING;
+                    }
+                    // Xử lý nhấp chuột vào "Thoát"
+                    else if (mouseX >= exitRect.x && mouseX <= exitRect.x + exitRect.w &&
+                             mouseY >= exitRect.y && mouseY <= exitRect.y + exitRect.h) {
+                        running = false;
+                    }
+                }
             }
-            else if (event.type == SDL_KEYDOWN && showResult) {
+            else if (event.type == SDL_KEYDOWN && gameState == PLAYING && showResult) {
                 if (event.key.keysym.sym == SDLK_SPACE) {
                     if (currentQuestionIndex < (int)questions.size() - 1) {
                         currentQuestionIndex++;
@@ -207,28 +313,13 @@ int main(int argc, char* argv[]) {
                         showResult = false;
                     }
                     else {
-                        string endText = "Kết thúc! Điểm của bạn: " + to_string(score);
-                        SDL_Texture* endTexture = createTextTexture(renderer, questionFont, endText.c_str(), textColor, w, h);
-                        if (!endTexture) {
-                            running = false;
-                        }
-                        else {
-                            SDL_RenderClear(renderer);
-                            SDL_RenderCopy(renderer, bgTexture, NULL, NULL);
-                            SDL_Rect endRect = {(WINDOW_WIDTH - w) / 2, 300, w, h};
-                            SDL_RenderCopy(renderer, endTexture, NULL, &endRect);
-                            SDL_RenderPresent(renderer);
-
-                            bool waitingForExit = true;
-                            while (waitingForExit) {
-                                while (SDL_PollEvent(&event)) {
-                                    if (event.type == SDL_QUIT || (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE)) {
-                                        waitingForExit = false;
-                                        running = false;
-                                    }
-                                }
-                            }
-                            SDL_DestroyTexture(endTexture);
+                        // Chuyển sang màn hình kết thúc
+                        string overText = "Kết thúc! Điểm của bạn: " + to_string(score);
+                        if (overTextTexture) SDL_DestroyTexture(overTextTexture);
+                        overTextTexture = createTextTexture(renderer, questionFont, overText.c_str(), textColor, w, h);
+                        if (overTextTexture) {
+                            overTextRect = {(WINDOW_WIDTH - w) / 2, 350, w, h};
+                            gameState = OVER;
                         }
                     }
                 }
@@ -239,24 +330,32 @@ int main(int argc, char* argv[]) {
             SDL_RenderClear(renderer);
             SDL_RenderCopy(renderer, bgTexture, NULL, NULL);
 
-            SDL_RenderCopy(renderer, questionTextures[currentQuestionIndex], NULL, &questionRects[currentQuestionIndex]);
-
-            for (int i = 0; i < 4; i++) {
-                if (i == selectedOption) {
-                    SDL_SetTextureColorMod(optionTextures[currentQuestionIndex][i], highlightColor.r, highlightColor.g, highlightColor.b);
-                } else {
-                    SDL_SetTextureColorMod(optionTextures[currentQuestionIndex][i], textColor.r, textColor.g, textColor.b);
-                }
-                SDL_RenderCopy(renderer, optionTextures[currentQuestionIndex][i], NULL, &optionRects[currentQuestionIndex][i]);
+            if (gameState == START) {
+                SDL_RenderCopy(renderer, startTextTexture, NULL, &startTextRect);
             }
-
-            if (showResult) {
-                if (selectedOption == questions[currentQuestionIndex].correctAnswer) {
-                    SDL_RenderCopy(renderer, correctTexture, NULL, &correctRect);
-                } else {
-                    SDL_RenderCopy(renderer, wrongTexture, NULL, &wrongRect);
+            else if (gameState == PLAYING) {
+                SDL_RenderCopy(renderer, questionTextures[currentQuestionIndex], NULL, &questionRects[currentQuestionIndex]);
+                for (int i = 0; i < 4; i++) {
+                    if (i == selectedOption) {
+                        SDL_SetTextureColorMod(optionTextures[currentQuestionIndex][i], highlightColor.r, highlightColor.g, highlightColor.b);
+                    } else {
+                        SDL_SetTextureColorMod(optionTextures[currentQuestionIndex][i], textColor.r, textColor.g, textColor.b);
+                    }
+                    SDL_RenderCopy(renderer, optionTextures[currentQuestionIndex][i], NULL, &optionRects[currentQuestionIndex][i]);
                 }
-                SDL_RenderCopy(renderer, nextTexture, NULL, &nextRect);
+                if (showResult) {
+                    if (selectedOption == questions[currentQuestionIndex].correctAnswer) {
+                        SDL_RenderCopy(renderer, correctTexture, NULL, &correctRect);
+                    } else {
+                        SDL_RenderCopy(renderer, wrongTexture, NULL, &wrongRect);
+                    }
+                    SDL_RenderCopy(renderer, nextTexture, NULL, &nextRect);
+                }
+            }
+            else if (gameState == OVER && overTextTexture) {
+                SDL_RenderCopy(renderer, overTextTexture, NULL, &overTextRect);
+                SDL_RenderCopy(renderer, replayTexture, NULL, &replayRect);
+                SDL_RenderCopy(renderer, exitTexture, NULL, &exitRect);
             }
 
             SDL_RenderPresent(renderer);
@@ -272,9 +371,13 @@ int main(int argc, char* argv[]) {
         }
     }
     SDL_DestroyTexture(bgTexture);
+    SDL_DestroyTexture(startTextTexture);
+    if (overTextTexture) SDL_DestroyTexture(overTextTexture);
     SDL_DestroyTexture(correctTexture);
     SDL_DestroyTexture(wrongTexture);
     SDL_DestroyTexture(nextTexture);
+    SDL_DestroyTexture(replayTexture);
+    SDL_DestroyTexture(exitTexture);
     TTF_CloseFont(questionFont);
     TTF_CloseFont(optionFont);
     SDL_DestroyRenderer(renderer);
